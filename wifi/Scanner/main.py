@@ -1,5 +1,12 @@
-# /bin/python3
+#!/usr/bin/env python3
 import scapy.all as scapy
+from scapy.layers.dot11 import (
+    Dot11,
+    Dot11Beacon,
+    Dot11Elt,
+    Dot11EltRSN,
+    RadioTap,
+)
 import sys
 import signal
 import questionary
@@ -18,18 +25,27 @@ class Scanner:
         self.interface = interface
 
     def __del__(self):
+        self.set_iface("managed")
+
+    def set_iface(self, mode):
         w0 = pyw.getcard(self.interface)
         pyw.down(w0)
-        pyw.set_mode(w0, "managed")
+        pyw.modeset(w0, mode)
         pyw.up(w0)
 
-    def set_iface(self):
-        w0 = pyw.getcard(self.interface)
-        pyw.down(w0)
-        pyw.modeset(w0, "monitor")
-        pyw.up(w0)
+    def beacon_frame(self, pkt):
+        if pkt.scapy.hashlayer(Dot11):
+            if pkt.type==0 and pkt.scapy.subty in (5,8):
 
-    # def run():
+
+    def run(self):
+        self.set_iface("monitor")
+        scapy.sniff(
+            iface=self.interface,
+            prn=self.beacon_frame,
+            store=0,
+            lfilter=lambda x: x.scapy.haslayer(Dot11),
+        )
 
 
 if __name__ == "__main__":
