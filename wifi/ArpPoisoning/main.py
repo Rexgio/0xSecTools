@@ -73,7 +73,7 @@ if __name__ == "__main__":
             t = threading.Thread(target=spoofer.run, daemon=True)
             threads.append(t)
             t.start()
-            print(f"[+] Hilo de spoofing iniciado para {host_ip}")
+            print(f"\033[32m[+]\033[0m Hilo de spoofing iniciado para {host_ip}")
 
         if not threads:
             print("[!] No se encontraron hosts en la red.")

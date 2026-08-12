@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import threading
 import time
+from scapy.all import EAPOL
 from scapy.layers.dot11 import Dot11, Dot11Beacon, Dot11Elt
 import scapy.all as scapy
 import pyric.pyw as pyw
@@ -10,6 +11,7 @@ class Scanner:
     def __init__(self, interface, inactivity_timeout=5):
         self.interface = interface
         self.found_aps = set()
+        self.handshake = set()
         self.found_aps_ssid = set()
         self.running = True
         self.inactivity_timeout = inactivity_timeout
@@ -87,6 +89,11 @@ class Scanner:
                     print(f"[+] Access Point MAC: {bssid} | SSID: {ssid}")
                     self.parse_advanced_beacon(pkt)
 
+    def handshake_frame(self, pkt):
+        if pkt.haslayer(EAPOL):
+            self.handshake.add(pkt)
+            print(pkt)
+
     def stop_check(self, pkt):
         if time.time() - self.last_discovery_time > self.inactivity_timeout:
             print(
@@ -94,6 +101,22 @@ class Scanner:
             )
             return True
         return False
+
+    def get_handshake(self):
+        return self.handshake
+
+    def run_handshake(self):
+        try:
+            scapy.sniff(
+                iface=self.interface,
+                prn=self.handshake_frame,
+                store=0,
+            )
+
+        except Exception as e:
+            print(f"[!] Error durante el escaneo: {e}")
+        finally:
+            self.stop()
 
     def run(self):
         print(f"[*] Configurando {self.interface} en modo monitor...")
@@ -115,6 +138,8 @@ class Scanner:
                 prn=self.beacon_frame,
                 stop_filter=self.stop_check,
                 store=0,
+            )
+
             )
         except Exception as e:
             print(f"[!] Error durante el escaneo: {e}")
