@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
+import subprocess
 import threading
 import time
 from scapy.all import EAPOL
 from scapy.layers.dot11 import Dot11, Dot11Beacon, Dot11Elt
 import scapy.all as scapy
-import pyric.pyw as pyw
 
 
 class Scanner:
-    def __init__(self, interface, inactivity_timeout=5):
+    def __init__(self, interface, inactivity_timeout=15):
         self.interface = interface
         self.found_aps = set()
         self.handshake = set()
@@ -24,19 +24,21 @@ class Scanner:
             pass
 
     def set_iface(self, mode):
-        w0 = pyw.getcard(self.interface)
-        pyw.down(w0)
-        pyw.modeset(w0, mode)
-        pyw.up(w0)
+        subprocess.run(["ip", "link", "set", self.interface, "down"], check=False)
+        subprocess.run(["iw", "dev", self.interface, "set", "type", mode], check=False)
+        subprocess.run(["ip", "link", "set", self.interface, "up"], check=False)
 
     def channel_hopper(self):
-        w0 = pyw.getcard(self.interface)
         while self.running:
             for ch in range(1, 14):
                 if not self.running:
                     break
                 try:
-                    pyw.chset(w0, ch)
+                    subprocess.run(
+                        ["iw", "dev", self.interface, "set", "channel", str(ch)],
+                        stderr=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                    )
                 except Exception:
                     pass
                 time.sleep(0.3)
@@ -79,44 +81,15 @@ class Scanner:
                     try:
                         ssid = (
                             pkt.info.decode("utf-8", errors="ignore")
-                            if hasattr(pkt, "info")
-                            else "Hidden"
+                            if hasattr(pkt, "info") and pkt.info
+                            else "<Hidden>"
                         )
                         self.found_aps_ssid.add(ssid)
                     except Exception:
                         ssid = "<Unknown>"
 
-                    print(f"[+] Access Point MAC: {bssid} | SSID: {ssid}")
+                    print(f"[+] AP Detectado: {bssid} | SSID: {ssid}")
                     self.parse_advanced_beacon(pkt)
-
-    def handshake_frame(self, pkt):
-        if pkt.haslayer(EAPOL):
-            self.handshake.add(pkt)
-            print(pkt)
-
-    def stop_check(self, pkt):
-        if time.time() - self.last_discovery_time > self.inactivity_timeout:
-            print(
-                f"\n[*] No se detectaron nuevos APs en {self.inactivity_timeout}s. Deteniendo..."
-            )
-            return True
-        return False
-
-    def get_handshake(self):
-        return self.handshake
-
-    def run_handshake(self):
-        try:
-            scapy.sniff(
-                iface=self.interface,
-                prn=self.handshake_frame,
-                store=0,
-            )
-
-        except Exception as e:
-            print(f"[!] Error durante el escaneo: {e}")
-        finally:
-            self.stop()
 
     def run(self):
         print(f"[*] Configurando {self.interface} en modo monitor...")
@@ -128,26 +101,25 @@ class Scanner:
         hopper_thread = threading.Thread(target=self.channel_hopper, daemon=True)
         hopper_thread.start()
 
-        print(
-            f"[*] Escaneando en {self.interface}... Se detendrá tras {self.inactivity_timeout}s sin novedades.\n"
-        )
+        print(f"[*] Escaneando en {self.interface}...")
 
         try:
-            scapy.sniff(
-                iface=self.interface,
-                prn=self.beacon_frame,
-                stop_filter=self.stop_check,
-                store=0,
-            )
-
-            )
+            while self.running:
+                scapy.sniff(
+                    iface=self.interface,
+                    prn=self.beacon_frame,
+                    timeout=1,
+                    store=0,
+                )
+                if time.time() - self.last_discovery_time > self.inactivity_timeout:
+                    print(
+                        f"\n[*] No se detectaron nuevos APs en {self.inactivity_timeout}s. Deteniendo..."
+                    )
+                    break
         except Exception as e:
             print(f"[!] Error durante el escaneo: {e}")
         finally:
             self.stop()
-
-    def get_aps(self):
-        return self.found_aps_ssid
 
     def stop(self):
         self.running = False

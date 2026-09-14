@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     scan = Scanner(inter)
     scan.run()
-    found_aps = scan.get_aps()
+    found_aps = scan.found_aps
 
     if not found_aps:
         print("[!] No Access Points were detected.")
