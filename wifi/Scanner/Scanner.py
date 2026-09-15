@@ -166,4 +166,33 @@ class Scanner:
             pass
 
 
+class DOS:
+    def __init__(self, t: int, wifi: str, ifc: str) -> None:
+        self.BSSID = wifi
+        self.iface = ifc
+        self.tIntercept = t
+        self.connectedUsers = set()
+
+    def classifyPkt(self, pkt):
+        if not pkt.haslayer(Dot11):
+            return
+
+        if not pkt.haslayer(EAPOL):
+            return
+
+        wifi = pkt[Dot11]
+
+        if wifi.addr1 == self.BSSID or wifi.addr2 == self.BSSID:
+            print(f"{wifi.addr2} -> {wifi.addr1}")
+            pkt.show()
+
+    def intercept(self) -> None:
+        scapy.sniff(
+            iface=self.iface,
+            prn=self.classifyPkt,
+            timeout=1,
+            store=0,
+        )
+
+
 __all__ = ["Scanner"]
