@@ -46,6 +46,7 @@ if __name__ == "__main__":
         "Select Wi-Fi Access Point:", choices=list(found_aps)
     ).ask()
 
+    """
     # preparation for DoS attack and KRACK
     if wifi is None:
         sys.exit(0)
@@ -69,3 +70,4 @@ if __name__ == "__main__":
             found.add(pkt)
 
     print(f"[*] Packets matched for '{wifi}': {len(found)}")
+    """
