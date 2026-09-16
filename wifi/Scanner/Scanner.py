@@ -17,12 +17,7 @@ class Scanner:
         self.inactivity_timeout = inactivity_timeout
         self.last_discovery_time = time.time()
         self.hopper_thread = None
-
-    def __del__(self):
-        try:
-            self.set_iface("managed")
-        except Exception as e:
-            print(e)
+        self.set_iface("monitor")
 
     def set_iface(self, mode):
         subprocess.run(["ip", "link", "set", self.interface, "down"], check=False)
@@ -129,7 +124,6 @@ class Scanner:
 
     def run(self):
         print(f"[*] Configurando {self.interface} en modo monitor...")
-        self.set_iface("monitor")
 
         self.running = True
         self.last_discovery_time = time.time()

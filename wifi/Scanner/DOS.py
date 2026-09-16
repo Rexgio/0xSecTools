@@ -15,71 +15,102 @@ class DOS:
         self.tIntercept = t
         self.connectedUsers = set()
         self.running = False
+        self.hopper_thread = None
         self.setIface("monitor")
         self.setChannel()
+        print("[DEBUG] DOS creado")
 
-    def __del__(self):
+    def stop(self):
+        self.running = False
+
+        if self.hopper_thread is not None:
+            self.hopper_thread.join()
+            self.hopper_thread = None
+
+        print("[*] Restaurando la interfaz a modo managed...")
+
         try:
             self.setIface("managed")
         except Exception as e:
             print(e)
 
     def channelHopper(self):
+        channels = [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            36,
+            40,
+            44,
+            48,
+            52,
+            56,
+            60,
+            64,
+            100,
+            104,
+            108,
+            112,
+            116,
+            120,
+            124,
+            128,
+            132,
+            136,
+            140,
+            144,
+        ]
+
         while self.running:
-            # 5G channels
-            channels = [
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-                9,
-                10,
-                11,
-                12,
-                13,
-                36,
-                40,
-                44,
-                48,
-                52,
-                56,
-                60,
-                64,
-                100,
-                104,
-                108,
-                112,
-                116,
-                120,
-                124,
-                128,
-                132,
-                136,
-                140,
-                144,
-            ]
             for ch in channels:
                 if not self.running:
                     break
-                try:
-                    subprocess.run(
-                        ["iw", "dev", self.iface, "set", "channel", str(ch)],
-                        stderr=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                    )
-                except Exception as e:
-                    print(e)
+
+                self.channel = ch
+
+                subprocess.run(
+                    [
+                        "iw",
+                        "dev",
+                        self.iface,
+                        "set",
+                        "channel",
+                        str(ch),
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+
                 time.sleep(0.3)
 
     def getChannel(self, pkt):
-        if pkt.haslayer(Dot11):
-            bssid = pkt[Dot11].addr2
-            if bssid and bssid.lower() == self.BSSID.lower():
-                self.running = False
+        if not pkt.haslayer(Dot11):
+            return
+
+        dot11 = pkt[Dot11]
+        bssid = self.BSSID.lower()
+
+        addresses = (
+            dot11.addr1,
+            dot11.addr2,
+            dot11.addr3,
+        )
+
+        if not any(addr and addr.lower() == bssid for addr in addresses):
+            return
+
+        if pkt.haslayer(Dot11Beacon) or (dot11.type == 0 and dot11.subtype == 5):
+            self.running = False
 
     def setChannel(self):
         self.running = True
@@ -117,13 +148,20 @@ class DOS:
                 pkt.show()
 
     def intercept(self) -> None:
-        self.setIface("monitor")
-        scapy.sniff(
-            iface=self.iface,
-            prn=self.classifyPkt,
-            timeout=1,
-            store=0,
-        )
+        try:
+            t = time.time()
+            while time.time() - t < self.tIntercept:
+                scapy.sniff(
+                    iface=self.iface,
+                    prn=self.classifyPkt,
+                    timeout=1,
+                    store=0,
+                )
+        except Exception as e:
+            print(f"[!] sniff error: {type(e).__name__}: {e}")
+        finally:
+            print("[DEBUG] sniff terminado")
+            self.stop()
 
 
 __all__ = ["DOS"]
