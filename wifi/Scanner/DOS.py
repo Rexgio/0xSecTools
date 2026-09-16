@@ -2,8 +2,7 @@
 import subprocess
 import threading
 import time
-from scapy.all import EAPOL
-from scapy.layers.dot11 import Dot11, Dot11Beacon, Dot11Elt
+from scapy.layers.dot11 import Dot11, Dot11Beacon
 import scapy.all as scapy
 
 
@@ -112,21 +111,23 @@ class DOS:
         if pkt.haslayer(Dot11Beacon) or (dot11.type == 0 and dot11.subtype == 5):
             self.running = False
 
-    def setChannel(self):
+    def setChannel(self) -> None:
         self.running = True
 
         hopper_thread = threading.Thread(target=self.channelHopper, daemon=True)
         hopper_thread.start()
 
-        try:
+        while self.running:
             scapy.sniff(
                 iface=self.iface,
                 prn=self.getChannel,
-                timeout=1,
+                stop_filter=lambda pkt: not self.running,
+                timeout=0.5,
                 store=0,
             )
-        finally:
-            self.running = False
+
+        self.running = False
+        hopper_thread.join(timeout=1)
 
     def setIface(self, mode):
         subprocess.run(["ip", "link", "set", self.iface, "down"], check=False)
@@ -142,25 +143,11 @@ class DOS:
 
             if any(addr and addr.lower() == bssid for addr in addresses):
                 print(f"{wifi.addr2} -> {wifi.addr1}")
-                pkt.show()
 
     def intercept(self) -> None:
         try:
-            print(f"[*]sniffing on ch: 44")
-            subprocess.run(
-                [
-                    "iw",
-                    "dev",
-                    self.iface,
-                    "set",
-                    "channel",
-                    str(44),
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-
             t = time.time()
+            print(f"sniff in {self.channel}")
             while time.time() - t < self.tIntercept:
                 scapy.sniff(
                     iface=self.iface,
