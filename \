@@ -134,7 +134,7 @@ class DOS:
         subprocess.run(["ip", "link", "set", self.iface, "up"], check=False)
 
     def classifyPkt(self, pkt) -> None:
-        if pkt.haslayer(Dot11):
+        if pkt.haslayer(Dot11) and pkt.haslayer(EAPOL):
             wifi = pkt[Dot11]
             bssid = self.BSSID.lower()
 
