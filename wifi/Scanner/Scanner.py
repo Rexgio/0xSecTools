@@ -16,6 +16,7 @@ class Scanner:
         self.running = True
         self.inactivity_timeout = inactivity_timeout
         self.last_discovery_time = time.time()
+        self.hopper_thread = None
 
     def __del__(self):
         try:
@@ -133,8 +134,8 @@ class Scanner:
         self.running = True
         self.last_discovery_time = time.time()
 
-        hopper_thread = threading.Thread(target=self.channel_hopper, daemon=True)
-        hopper_thread.start()
+        self.hopper_thread = threading.Thread(target=self.channel_hopper, daemon=False)
+        self.hopper_thread.start()
 
         print(f"[*] Escaneando en {self.interface}...")
 
@@ -158,40 +159,17 @@ class Scanner:
 
     def stop(self):
         self.running = False
+
+        if self.hopper_thread is not None:
+            self.hopper_thread.join()
+            self.hopper_thread = None
+
         print("[*] Restaurando la interfaz a modo managed...")
+
         try:
             self.set_iface("managed")
         except Exception as e:
             print(e)
-
-
-class DOS:
-    def __init__(self, t: int, wifi: str, ifc: str) -> None:
-        self.BSSID = wifi
-        self.iface = ifc
-        self.tIntercept = t
-        self.connectedUsers = set()
-
-    def classifyPkt(self, pkt) -> None:
-        if not pkt.haslayer(Dot11):
-            return
-
-        if not pkt.haslayer(EAPOL):
-            return
-
-        wifi = pkt[Dot11]
-
-        if wifi.addr1 == self.BSSID or wifi.addr2 == self.BSSID:
-            print(f"{wifi.addr2} -> {wifi.addr1}")
-            pkt.show()
-
-    def intercept(self) -> None:
-        scapy.sniff(
-            iface=self.iface,
-            prn=self.classifyPkt,
-            timeout=1,
-            store=0,
-        )
 
 
 __all__ = ["Scanner"]
