@@ -20,8 +20,8 @@ class Scanner:
     def __del__(self):
         try:
             self.set_iface("managed")
-        except Exception:
-            pass
+        except Exception as e:
+            print(e)
 
     def set_iface(self, mode):
         subprocess.run(["ip", "link", "set", self.interface, "down"], check=False)
@@ -75,11 +75,23 @@ class Scanner:
                         stderr=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(e)
                 time.sleep(0.3)
 
     def parse_advanced_beacon(self, pkt):
+        # try to get the SSID
+        try:
+            ssid = (
+                pkt.info.decode("utf-8", errors="ignore")
+                if hasattr(pkt, "info") and pkt.info
+                else "<Hidden>"
+            )
+            self.found_aps_ssid.add(ssid)
+        except Exception:
+            ssid = "<Unknown>"
+
+        # Gathering harder data as Wi-Fi protection
         if pkt.haslayer(Dot11Beacon):
             bssid = pkt.addr2
             dbm_signal = pkt.dBm_AntSignal if hasattr(pkt, "dBm_AntSignal") else "N/A"
@@ -103,29 +115,16 @@ class Scanner:
                 crypto.add("OPEN")
 
             print(
-                f"BSSID: {bssid} | Signal: {dbm_signal} dBm | Ch: {channel} | Security: {', '.join(crypto)}"
+                f"BSSID: {bssid} | SSID: {ssid} | Signal: {dbm_signal} dBm | Ch: {channel} | Security: {', '.join(crypto)}"
             )
 
     def beacon_frame(self, pkt):
-        if pkt.haslayer(Dot11):
-            if pkt.type == 0 and pkt.subtype in (5, 8):
-                bssid = pkt.addr2
-                if bssid and bssid not in self.found_aps:
-                    self.found_aps.add(bssid)
-                    self.last_discovery_time = time.time()
-
-                    try:
-                        ssid = (
-                            pkt.info.decode("utf-8", errors="ignore")
-                            if hasattr(pkt, "info") and pkt.info
-                            else "<Hidden>"
-                        )
-                        self.found_aps_ssid.add(ssid)
-                    except Exception:
-                        ssid = "<Unknown>"
-
-                    print(f"[+] AP Detectado: {bssid} | SSID: {ssid}")
-                    self.parse_advanced_beacon(pkt)
+        if pkt.haslayer(Dot11) and (pkt.type == 0 and pkt.subtype in (5, 8)):
+            bssid = pkt.addr2
+            if bssid and bssid not in self.found_aps:
+                self.found_aps.add(bssid)
+                self.last_discovery_time = time.time()
+                self.parse_advanced_beacon(pkt)
 
     def run(self):
         print(f"[*] Configurando {self.interface} en modo monitor...")
@@ -162,8 +161,8 @@ class Scanner:
         print("[*] Restaurando la interfaz a modo managed...")
         try:
             self.set_iface("managed")
-        except Exception:
-            pass
+        except Exception as e:
+            print(e)
 
 
 class DOS:
@@ -173,7 +172,7 @@ class DOS:
         self.tIntercept = t
         self.connectedUsers = set()
 
-    def classifyPkt(self, pkt):
+    def classifyPkt(self, pkt) -> None:
         if not pkt.haslayer(Dot11):
             return
 
